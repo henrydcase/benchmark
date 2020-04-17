@@ -75,8 +75,8 @@ def calculate_change(old_val, new_val):
     if old_val == 0 and new_val == 0:
         return 0.0
     if old_val == 0:
-        return float(new_val - old_val) / (float(old_val + new_val) / 2)
-    return float(new_val - old_val) / abs(old_val)
+        return float(new_val - old_val) / (float(old_val + new_val) / 2) * 100
+    return float(new_val - old_val) / abs(old_val) * 100
 
 
 def filter_benchmark(json_orig, family, replacement=""):
@@ -213,7 +213,8 @@ def generate_difference_report(
         display_aggregates_only=False,
         utest=False,
         utest_alpha=0.05,
-        use_color=True):
+        use_color=True,
+        user_counters=None):
     """
     Calculate and report the difference between each test of two benchmarks
     runs specified as 'json1' and 'json2'.
@@ -231,8 +232,11 @@ def generate_difference_report(
         first_col_width,
         len('Benchmark'))
     first_col_width += len(UTEST_COL_NAME)
-    first_line = "{:<{}s}Time             CPU      Time Old      Time New       CPU Old       CPU New".format(
-        'Benchmark', 12 + first_col_width)
+    first_line = "{:<{}s}CPU       CPU Old       CPU New"
+    user_counters=["CPU cycles: mean"]
+    for n in user_counters or []:
+        first_line = "".join([first_line, " "*6+n, " "*6,"Old "+n, " "*6, "New "+n])
+    first_line = first_line.format('Benchmark', 12 + first_col_width)
     output_strs = [first_line, '-' * len(first_line)]
 
     partitions = partition_benchmarks(json1, json2)
@@ -241,8 +245,6 @@ def generate_difference_report(
         for i in range(min(len(partition[0]), len(partition[1]))):
             bn = partition[0][i]
             other_bench = partition[1][i]
-            #print(other_bench["CPU cycles: mean"])
-            #print(bn["CPU cycles: mean"])
 
             # *If* we were asked to only display aggregates,
             # and if it is non-aggregate, then skip it.
@@ -251,7 +253,8 @@ def generate_difference_report(
                 if bn['run_type'] != 'aggregate':
                     continue
 
-            fmt_str = "{}{:<{}s}{endc}{}{:+16.4f}{endc}{}{:+16.4f}{endc}{:14.0f}{:14.0f}{endc}{:14.0f}{:14.0f}"
+            fmt_str = "{}{:<{}s}{endc}{}{:+16.2f} %{endc}{:14.0f}{:14.0f}{}{:+16.2f} %{endc}{:25.0f}{:26.0f}"
+            #fmt_str = "{:14.0f}"*2*len(n)
 
             def get_color(res):
                 if res > 0.05:
@@ -261,21 +264,22 @@ def generate_difference_report(
                 else:
                     return BC_CYAN
 
-            tres = calculate_change(bn['real_time'], other_bench['real_time'])
+            #tres = calculate_change(bn['real_time'], other_bench['real_time'])
             cpures = calculate_change(bn['cpu_time'], other_bench['cpu_time'])
+            cycles = calculate_change(bn["CPU cycles: mean"], other_bench["CPU cycles: mean"])
             output_strs += [color_format(use_color,
                                          fmt_str,
                                          BC_HEADER,
                                          bn['name'],
                                          first_col_width,
-                                         get_color(tres),
-                                         tres,
                                          get_color(cpures),
                                          cpures,
-                                         bn['real_time'],
-                                         other_bench['real_time'],
                                          bn['cpu_time'],
                                          other_bench['cpu_time'],
+                                         get_color(cycles),
+                                         cycles,
+                                         bn['CPU cycles: mean'],
+                                         other_bench['CPU cycles: mean'],
                                          endc=BC_ENDC)]
 
         # After processing the whole partition, if requested, do the U test.
